@@ -14,11 +14,13 @@ public class Game {
 	public static final int STATE_BOX = 4;
 	
 	public static final int STATE_WALL = 8;
+	public static final int STATE_WALL_IN_DEADZONE = 9;
 	public static final int STATE_BOMB = 16;
 	public static final int STATE_BOMB_RANGE_UP = 32;
 	public static final int STATE_HEALTH_UP = 64;
 	public static final int STATE_TRAP_UP = 128;
 	public static final int STATE_PLAYER = 256;
+	
 	public static final int STATE_PLAYER_IN_DEADZONE = 257;
 	public static final int STATE_PLAYERWITHBOMB = 272;
 	
@@ -55,11 +57,17 @@ public class Game {
 	public int StepsFromlastUpdateOtherPlayer=0;
 	public int v;
 	public int bomb_ticker=0;
-	public enum Status{SEARCHING,GO_FOR_BOX,RUN_FROM_BOMB,Go_FOR_ITEM,PLACE_BOMB}
+	public enum Status{SEARCHING,GO_FOR_BOX,RUN_FROM_BOMB,Go_FOR_ITEM,PLACE_BOMB,GOTO_CENTER}
 	public Status state=Status.SEARCHING;
 	
 	public Position next_box_pos;
 	public Position next_box_near_pos;
+	public Position nearToCenter;
+	public boolean is_pathToCenter=false;
+	public boolean gotocenter=true;
+	public boolean goingToCenter=false;
+	int index_path_Cent;
+	LinkedList<Integer> pathToCenter= new LinkedList<Integer>();;
 	public class Position {
 		int x;
 		int y;
@@ -79,9 +87,10 @@ public class Game {
 		}
 	};
 
-	private int getdist(Position p) {
-		return (int) Math.pow((pl.x-p.x),2) + (int) Math.pow((pl.y-p.y),2);
+	private int getdist(Position p,int s_x,int s_y) {
+		return (int) Math.pow((s_x-p.x),2) + (int) Math.pow((s_y-p.y),2);
 	}
+	
 	private int getdist(int x,int y) {
 		return (int) Math.pow((pl.x-x),2) + (int) Math.pow((pl.y-y),2);
 	}
@@ -91,8 +100,8 @@ public class Game {
 	    // roll number
 	    public int compare(Position p1,Position p2)
 	    {
-	        int p1_d=getdist(p1);
-	        int p2_d=getdist(p2);
+	        int p1_d=getdist(p1,pl.x,pl.y);
+	        int p2_d=getdist(p2,pl.x,pl.y);
 	        if(p1_d==p2_d) {
 	        	return 0;
 	        }
@@ -141,6 +150,80 @@ public class Game {
 		this.otherPl_health=health;
 		this.StepsFromlastUpdateOtherPlayer=0;
 	}
+	public int findNearestFromCenter() {
+		Position p=new Position(h/2,w/2);
+		Position t=new Position(p.x,p.y);
+		boolean flag=true;
+		boolean notFound=true;
+		
+		int i=0;
+		while(notFound) {
+			
+				if(p.x-i>0) {
+					if( map[p.x-i][p.y]==STATE_ZONE) {
+				
+						if(flag) {
+							t.x=p.x-i;
+							flag=false;
+						}
+						else if(getdist(p.x-i,p.y)<getdist(t,pl.x,pl.y)) {
+							t.x=p.x-i;
+							
+						}
+						notFound=false;
+					}
+				
+				}
+				if(p.x+i<h) {
+					if(map[p.x+i][p.y]==STATE_ZONE) {
+					if(flag) {
+						t.x=p.x+i;
+						flag=false;
+					}
+					else if(getdist(p.x+i,p.y)<getdist(t,pl.x,pl.y)) {
+						t.x=p.x+i;
+						
+					}
+					notFound=false;
+					}
+				
+				}
+				if(p.y-i>0) {
+					if(map[p.x][p.y-i]==STATE_ZONE) {
+					if(flag) {
+						t.y=p.y-i;
+						flag=false;
+					}
+					
+					notFound=false;
+				}
+					
+				}
+				if(p.y+i<w ) {
+					if(map[t.x][p.y+i]==STATE_ZONE) {
+					if(flag) {
+						t.y=p.y+i;
+						flag=false;
+					}
+					else if(getdist(p.x,p.y+i)<getdist(t,pl.x,pl.y)) {
+						t.y=p.y+i;
+						
+					}
+					notFound=false;
+					}
+					
+					}
+				
+				
+				i++;
+				}
+				System.err.println("Nearest to center: "+t);
+				nearToCenter=t;
+				//return printShortestDistance(convertTo1D(pl.x, pl.y),convertTo1D(p.x,p.y));
+				return printShortestDistance(convertTo1D(pl.x, pl.y),convertTo1D(nearToCenter.x,nearToCenter.y));
+			
+		
+	}
 	public int findBox( Position x)
     {
         for(int i=0;i<boxes.size();i++) {
@@ -159,7 +242,39 @@ public class Game {
         }
         return -1;
     }
-	
+	private void addEdge( int i, int j)
+    {
+	 	if(adj.get(i).indexOf(j)==-1) {
+	        adj.get(i).add(j);
+	        adj.get(j).add(i);
+        
+	 	}
+    }
+	private void deletetile( int pos)
+    {
+	 	for(int i=0;i<adj.get(pos).size();i++) {
+	 		int t=adj.get(pos).get(i);
+	 		int index=adj.get(t).indexOf(pos);
+	 		adj.get(t).remove(index);
+	 	}
+	 	adj.get(pos).clear();
+    }
+	public void updateTilesAroundPlayer() {
+		int x=pl.x;
+		int y=pl.y;
+		if(x-1>0 && (map[x-1][y]==STATE_ZONE || map[x-1][y]==STATE_TRAP_UP || map[x-1][y]==STATE_HEALTH_UP || map[x-1][y]==STATE_BOMB_RANGE_UP )) {
+			addEdge(convertTo1D(x, y),convertTo1D(x-1, y));
+		}
+		else if(x+1<h && (map[x+1][y]==STATE_ZONE || map[x+1][y]==STATE_TRAP_UP || map[x+1][y]==STATE_HEALTH_UP || map[x+1][y]==STATE_BOMB_RANGE_UP )) {
+			addEdge(convertTo1D(x, y),convertTo1D(x+1, y));
+		}
+		else if(y-1>0 && (map[x][y-1]==STATE_ZONE || map[x][y-1]==STATE_TRAP_UP || map[x][y-1]==STATE_HEALTH_UP || map[x][y-1]==STATE_BOMB_RANGE_UP )) {
+			addEdge(convertTo1D(x, y),convertTo1D(x, y-1));
+		}
+		else if(y+1<w && (map[x][y+1]==STATE_ZONE || map[x][y+1]==STATE_TRAP_UP || map[x][y+1]==STATE_HEALTH_UP || map[x][y+1]==STATE_BOMB_RANGE_UP )) {
+			addEdge(convertTo1D(x, y),convertTo1D(x, y+1));
+		}
+	}
 	public void updateTile(int x,int y, int state) {
 
 
@@ -183,6 +298,10 @@ public class Game {
 			}
 			
 		}
+		else if(state==STATE_DEADZONE ){
+			deletetile(convertTo1D(x, y));
+			
+		}
 		
 		if(map[x][y]==STATE_BOX && state!=STATE_BOX) {
 			System.err.println("this box is out"+x+","+y);
@@ -190,18 +309,21 @@ public class Game {
 			boxes.remove(p_t);
 		}
 			this.map[x][y]=state;
-		if(x-1>0 && (map[x-1][y]==STATE_ZONE || map[x-1][y]==STATE_TRAP_UP || map[x-1][y]==STATE_HEALTH_UP || map[x-1][y]==STATE_BOMB_RANGE_UP )) {
-			addEdge(convertTo1D(x, y),convertTo1D(x-1, y));
+		if(state==STATE_ZONE || state==STATE_BOMB_RANGE_UP ||state==STATE_HEALTH_UP ||state==STATE_TRAP_UP ) {
+			if(x-1>0 && (map[x-1][y]==STATE_ZONE || map[x-1][y]==STATE_TRAP_UP || map[x-1][y]==STATE_HEALTH_UP || map[x-1][y]==STATE_BOMB_RANGE_UP )) {
+				addEdge(convertTo1D(x, y),convertTo1D(x-1, y));
+			}
+			if(x+1<h && (map[x+1][y]==STATE_ZONE || map[x+1][y]==STATE_TRAP_UP || map[x+1][y]==STATE_HEALTH_UP || map[x+1][y]==STATE_BOMB_RANGE_UP )) {
+				addEdge(convertTo1D(x, y),convertTo1D(x+1, y));
+			}
+			if(y-1>0 && (map[x][y-1]==STATE_ZONE || map[x][y-1]==STATE_TRAP_UP || map[x][y-1]==STATE_HEALTH_UP || map[x][y-1]==STATE_BOMB_RANGE_UP )) {
+				addEdge(convertTo1D(x, y),convertTo1D(x, y-1));
+			}
+			if(y+1<w && (map[x][y+1]==STATE_ZONE || map[x][y+1]==STATE_TRAP_UP || map[x][y+1]==STATE_HEALTH_UP || map[x][y+1]==STATE_BOMB_RANGE_UP )) {
+				addEdge(convertTo1D(x, y),convertTo1D(x, y+1));
+			}
 		}
-		else if(x+1<h && (map[x+1][y]==STATE_ZONE || map[x+1][y]==STATE_TRAP_UP || map[x+1][y]==STATE_HEALTH_UP || map[x+1][y]==STATE_BOMB_RANGE_UP )) {
-			addEdge(convertTo1D(x, y),convertTo1D(x+1, y));
-		}
-		else if(y-1>0 && (map[x][y-1]==STATE_ZONE || map[x][y-1]==STATE_TRAP_UP || map[x][y-1]==STATE_HEALTH_UP || map[x][y-1]==STATE_BOMB_RANGE_UP )) {
-			addEdge(convertTo1D(x, y),convertTo1D(x, y-1));
-		}
-		else if(y+1<w && (map[x][y+1]==STATE_ZONE || map[x][y+1]==STATE_TRAP_UP || map[x][y+1]==STATE_HEALTH_UP || map[x][y+1]==STATE_BOMB_RANGE_UP )) {
-			addEdge(convertTo1D(x, y),convertTo1D(x, y+1));
-		}
+		
 	}
 	public void showMap() {
 		for(int i=0;i<h;i++) {
@@ -280,14 +402,35 @@ public class Game {
 			action=ACTION_GO_LEFT;
 		}
 		
-		else
-		{
-			System.err.println("i am gonna stay");
+		
+		return action;
+	}
+	public boolean dontGoBack(int a) {
+		if(pl.lastAction==ACTION_GO_DOWN && a==ACTION_GO_UP)return false;
+		if(pl.lastAction==ACTION_GO_UP && a==ACTION_GO_DOWN)return false;
+		if(pl.lastAction==ACTION_GO_LEFT && a==ACTION_GO_RIGHT)return false;
+		if(pl.lastAction==ACTION_GO_RIGHT && a==ACTION_GO_LEFT)return false;
+		
+		return true;
+	}
+	public int playerJustMove() {
+		
+		int dist=Integer.MAX_VALUE;
+		int action=ACTION_STAY;
+		int pos1d=convertTo1D(pl.x, pl.y);
+		for(int i=0;i<adj.get(pos1d).size();i++) {
+			Position p_tmp=convertTo2D(adj.get(pos1d).get(i));
+			int tmp=getdist(p_tmp,h/2,w/2);
+			int a_tmp= moveToTile(p_tmp.x, p_tmp.y);
+			
+			if(tmp<dist && dontGoBack(action)) {
+				action=a_tmp;
+			}
 		}
 		return action;
 	}
-	public  void findPathToNearestBox() {
-		Position p=boxes.get(0);
+	public  void findPathToNearestBox(int i) {
+		Position p=boxes.get(i);
 		Position t=new Position(p.x,p.y);
 		boolean flag=true;
 		if(p.x-1>0 && map[p.x-1][p.y]==STATE_ZONE) {
@@ -302,7 +445,7 @@ public class Game {
 				t.x=p.x+1;
 				flag=false;
 			}
-			else if(getdist(p.x+1,p.y)<getdist(t)) {
+			else if(getdist(p.x+1,p.y)<getdist(t,pl.x,pl.y)) {
 				t.x=p.x+1;
 				
 			}
@@ -313,7 +456,7 @@ public class Game {
 				t.y=p.y-1;
 				flag=false;
 			}
-			else if(getdist(p.x,p.y-1)<getdist(t)) {
+			else if(getdist(p.x,p.y-1)<getdist(t,pl.x,pl.y)) {
 				t.y=p.y-1;
 			}
 			
@@ -323,7 +466,7 @@ public class Game {
 				t.y=p.y+1;
 				flag=false;
 			}
-			else if(getdist(p.x,p.y+1)<getdist(t)) {
+			else if(getdist(p.x,p.y+1)<getdist(t,pl.x,pl.y)) {
 				t.y=p.y+1;
 				
 			}
@@ -343,92 +486,112 @@ public class Game {
 		return false;
 	}
 	public int doAnAction() {
-		if(pl.x==10&&pl.y==9) {
-			for(int i=0;i<adj.get(159).size();i++) {
-				System.err.print(adj.get(159).get(i)+" ");
-			}
-			System.err.println();
-		}
-
+		
+			
+		
+		updateTilesAroundPlayer();
+		
+		
 			
 		int action;
 		System.err.println("Player: ("+pl.x+","+pl.y+")");
 		System.err.println("--------------------------");
-		
-		
-		if(state==Status.SEARCHING) {
-			
-			if(items.size()>0) {
-				state=Status.Go_FOR_ITEM;
+		System.err.println(" deadzoneStartingStep: "+deadzoneStartingStep);
+		if(pl.stepCount<= (deadzoneStartingStep)-3) {
+			if(state==Status.SEARCHING) {
+				
+				if(items.size()>0) {
+					state=Status.Go_FOR_ITEM;
+					goingToCenter=false;
+				}
+				else if(isBoxAround()) {
+					goingToCenter=false;
+					state=Status.PLACE_BOMB;
+				}
+				
+				else if(boxes.size()>0 ) {
+					goingToCenter=false;
+						state=Status.GO_FOR_BOX;
+						
+				}
+				
+				
 			}
-			else if(isBoxAround()) {
-				state=Status.PLACE_BOMB;
-			}
-			else if(boxes.size()>0 ) {
-					state=Status.GO_FOR_BOX;
-			}
 			
+			if(state==Status.GO_FOR_BOX) {
+				findPathToNearestBox(0);
+				System.err.println("lock for : "+next_box_pos);
+				/*if(pl.x==next_box_near_pos.x && pl.y==next_box_near_pos.y) {
+					boxes.remove(findBox(next_box_pos));
+					action=ACTION_PLACE_BOMB;
+					state=Status.RUN_FROM_BOMB;
+					bomb_ticker=0;
+					items.add(next_box_pos);
+				}*/
+				//else {
+				
 			
-		}
-		
-		if(state==Status.GO_FOR_BOX) {
-			findPathToNearestBox();
-			System.err.println("lock for : "+next_box_pos);
-			/*if(pl.x==next_box_near_pos.x && pl.y==next_box_near_pos.y) {
-				boxes.remove(findBox(next_box_pos));
+					int t= printShortestDistance(convertTo1D(pl.x, pl.y),convertTo1D(next_box_near_pos.x,next_box_near_pos.y));
+					
+					if(t==-1) {
+						action=moveToTile(h/2, w/2);
+						
+						System.err.println("here 1 "+action);
+					}
+					else {
+						Position p=convertTo2D(t);
+						action=moveToTile(p.x, p.y);
+					}
+					state=Status.SEARCHING;
+				//}
+			}
+			else if(state==Status.PLACE_BOMB) {
+				
 				action=ACTION_PLACE_BOMB;
 				state=Status.RUN_FROM_BOMB;
-				bomb_ticker=0;
-				items.add(next_box_pos);
-			}*/
-			//else {
+			}
+			else if(state==Status.RUN_FROM_BOMB) {
 				
-				int t= printShortestDistance(convertTo1D(pl.x, pl.y),convertTo1D(next_box_near_pos.x,next_box_near_pos.y));
+				int t= printShortestDistance(convertTo1D(pl.x, pl.y),convertTo1D(pl.x+1,pl.y-1));
 				Position p=convertTo2D(t);
+				action=moveToTile(p.x, p.y);
+				if(bomb_ticker>=bombDelayPerStep) {
+					state=Status.SEARCHING;
+					bomb_ticker=0;
+				}
+				bomb_ticker++;
+				System.err.println("bobm ticker"+bomb_ticker);
+			}
+			else if(state==Status.Go_FOR_ITEM) {
+				Position p=items.get(0);
+				if(pl.x==p.x && pl.y==p.y) {
+					items.remove(0);
+					state=Status.SEARCHING;
+				}
+				int t= printShortestDistance(convertTo1D(pl.x, pl.y),convertTo1D(p.x,p.y));
+				p=convertTo2D(t);
 				
 				action=moveToTile(p.x, p.y);
-				state=Status.SEARCHING;
-			//}
-		}
-		else if(state==Status.PLACE_BOMB) {
-			
-			action=ACTION_PLACE_BOMB;
-			state=Status.RUN_FROM_BOMB;
-		}
-		else if(state==Status.RUN_FROM_BOMB) {
-			
-			if(bomb_ticker%2==0) {
-				action=ACTION_GO_LEFT;
+				
 			}
+			
 			else {
-				action=ACTION_GO_DOWN;
-			}
-			if(bomb_ticker>=bombDelayPerStep) {
-				state=Status.SEARCHING;
-				bomb_ticker=0;
-			}
-			bomb_ticker++;
-			System.err.println("bobm ticker"+bomb_ticker);
-		}
-		else if(state==Status.Go_FOR_ITEM) {
-			Position p=items.get(0);
-			if(pl.x==p.x && pl.y==p.y) {
-				items.remove(0);
-				state=Status.SEARCHING;
-			}
-			int t= printShortestDistance(convertTo1D(pl.x, pl.y),convertTo1D(p.x,p.y));
-			p=convertTo2D(t);
+				int t=printShortestDistance(convertTo1D(pl.x, pl.y),convertTo1D(h/2,w/2));
 			
-			action=moveToTile(p.x, p.y);
-			
+				Position p=convertTo2D(t);
+				action=moveToTile(p.x, p.y);
+			}
+			if(action==ACTION_STAY) {
+				action=moveToTile(h/2, w/2);
+			}
 		}
 		else {
-			int t=printShortestDistance(convertTo1D(pl.x, pl.y),convertTo1D(h/2,w/2));
+			System.err.println("RUUUUUUUUUNNNNNN!!!!");
+			int t=findNearestFromCenter();
 			Position p=convertTo2D(t);
 			action=moveToTile(p.x, p.y);
 		}
-	
-		System.err.println("Action: "+action);
+			System.err.println("Action: "+action);
 		
 		return action;
 	}
@@ -441,11 +604,7 @@ public class Game {
 		p.x=((int)(pos/w));
 		return p;
 	}
-	 private void addEdge( int i, int j)
-	    {
-	        adj.get(i).add(j);
-	        adj.get(j).add(i);
-	    }
+	 
 	 
 	private int printShortestDistance(int s, int dest){
 			// predecessor[i] array stores predecessor of
@@ -477,7 +636,44 @@ public class Game {
 			for (int i = path.size() - 1; i >= 0; i--) {
 			   System.err.print(path.get(i) + " ");
 			}
-			return path.get(path.size() - 2);
+			int h=path.size()-1;
+			while(path.get(h)==convertTo1D(pl.x, pl.y)){
+				h--;
+			}
+			return path.get(h);
+}
+	private boolean ShortestDistanceToCenter(int s, int dest){
+		// predecessor[i] array stores predecessor of
+		// i and distance array stores distance of i
+		// from s
+		int pred[] = new int[v];
+		int dist[] = new int[v];
+		System.err.println("test");
+		if (BFS( s, dest, pred, dist) == false) {
+		   System.err.println("Given source and destination" +
+		                                "are not connected");
+		   return false;
+		}
+		
+		// LinkedList to store path
+		 pathToCenter = new LinkedList<Integer>();
+		int crawl = dest;
+		pathToCenter.add(crawl);
+		while (pred[crawl] != -1) {
+			pathToCenter.add(pred[crawl]);
+		   crawl = pred[crawl];
+		}
+		
+		// Print distance
+		System.err.println("Shortest path length is: " + dist[dest]);
+		
+		// Print path
+		System.err.println("Path is ::");
+		for (int i = pathToCenter.size() - 1; i >= 0; i--) {
+		   System.err.print(pathToCenter.get(i) + " ");
+		}
+		return true;
+		
 }
 	private boolean BFS(int src,int dest, int pred[], int dist[])
 		{
