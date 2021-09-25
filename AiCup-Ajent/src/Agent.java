@@ -3,18 +3,29 @@ public class Agent {
 	int x;
 	int y;
 	int health;
-	int bomb_range;
-	int trap_c;
-	public Agent(int x,int y,int health,int bomb_range,int trap_c){
+	int bombRange;
+	int trapCount;
+	int lastAction;
+	int stepCount;
+	int healthUpgradeCount;
+	public Agent(int x,int y,int health,int bombRange,int trapCount){
 		this.x=x;
 		this.y=y;
 		this.health=health;
-		this.bomb_range=bomb_range;
-		this.trap_c=trap_c;
-	
+		this.bombRange=bombRange;
+		this.trapCount=trapCount;
+		this.healthUpgradeCount=0;
 	}
 	public String toString() {
-		return "{\"x\"="+x+", \"y\"="+y+", \"health\"="+health+", \"bomb_range\"="+bomb_range+", \"trap_c\"="+trap_c+" }";
+		return "{\"x\"="+x+", \"y\"="+y+", \"health\"="+health+", \"bombRange\"="+bombRange+", \"trapCount\"="+trapCount+" }";
+	}
+	public void update(int stepCount,int lastAction,int x,int y,int health,int healthUpgradeCount,int bombRange,int trapCount ) {
+		this.x=x;
+		this.y=y;
+		this.health=health;
+		this.bombRange=bombRange;
+		this.trapCount=trapCount;
+		this.healthUpgradeCount=healthUpgradeCount;
 	}
 	
 }
